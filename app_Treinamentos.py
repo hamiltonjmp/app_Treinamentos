@@ -10,7 +10,7 @@ import os
 # ==========================================
 st.set_page_config(page_title="Dashboard de Treinamentos", layout="wide", initial_sidebar_state="expanded")
 
-DIRETORIO = r"C:\Users\hamilton.pires\OneDrive - Grupo Mateus\hamilton\Consultoria\Lidiane\2026\app_Treinamentos"
+DIRETORIO = "."
 ARQUIVO_BASE = os.path.join(DIRETORIO, 'BD_Treinamentos.xlsx')
 ARQUIVO_SETORES = os.path.join(DIRETORIO, 'lista_setores.xlsx')
 
