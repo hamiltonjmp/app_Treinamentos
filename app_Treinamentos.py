@@ -14,7 +14,7 @@ st.set_page_config(page_title="Dashboard de Treinamentos", layout="wide", initia
 MESES_PT = {1: 'Jan', 2: 'Fev', 3: 'Mar', 4: 'Abr', 5: 'Mai', 6: 'Jun',
             7: 'Jul', 8: 'Ago', 9: 'Set', 10: 'Out', 11: 'Nov', 12: 'Dez'}
 
-# Conexão com o Google Sheets (Substituiu os caminhos locais do OS)
+# Conexão com o Google Sheets
 conn = st.connection("gsheets", type=GSheetsConnection)
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/12qx2Y7fM1rSq2Mtt79QwV5owtL8hjZA9CYMBaldhMzo/edit"
 
@@ -23,61 +23,71 @@ URL_PLANILHA = "https://docs.google.com/spreadsheets/d/12qx2Y7fM1rSq2Mtt79QwV5ow
 # ==========================================
 @st.cache_data(ttl=5) # Cache curto para a nuvem atualizar rápido
 def carregar_dados():
-    try:
-        df = conn.read(spreadsheet=URL_PLANILHA, worksheet="Dados")
-        
-        if not df.empty:
-            df['DATA'] = pd.to_datetime(df['DATA'])
-            
-            df['ANO'] = df['DATA'].dt.year
-            df['MES_NUM'] = df['DATA'].dt.month
-            
-            # Limpeza para evitar filtros duplicados
-            df['TIPO DO PARTICIPANTE'] = df['TIPO DO PARTICIPANTE'].astype(str).str.strip().str.title()
-            df['LOCAL'] = df['LOCAL'].astype(str).str.strip()
-            df['Setor Participante'] = df['Setor Participante'].astype(str).str.strip()
-            
-            # Cria as colunas para o filtro de mês em PT
-            df['MÊS_NOME'] = df['MES_NUM'].map(MESES_PT)
-            df['MES_ANO_FILTRO'] = df['MÊS_NOME'] + "." + df['ANO'].astype(str).str[-2:]
-            
-            df['Ordem_Tempo'] = df['ANO'].astype(str) + df['MES_NUM'].astype(str).str.zfill(2)
-            
-            return df
-    except Exception:
-        pass
+    # Lemos a planilha diretamente
+    df = conn.read(spreadsheet=URL_PLANILHA, worksheet="Dados")
     
-    # Se der erro ou a planilha estiver vazia, cria a estrutura base
-    colunas = ['ID', 'ANO', 'DATA', 'NOME DO TREINAMENTO', 'LOCAL', 
-               'TIPO DO PARTICIPANTE', 'QTD PARTICIPANTES', 'Setor Participante']
-    return pd.DataFrame(columns=colunas)
+    # Limpa linhas fantasmas em branco que o Google Sheets às vezes cria
+    df = df.dropna(subset=['NOME DO TREINAMENTO', 'DATA'], how='all')
+    
+    if df.empty:
+        colunas = ['ID', 'ANO', 'DATA', 'NOME DO TREINAMENTO', 'LOCAL', 
+                   'TIPO DO PARTICIPANTE', 'QTD PARTICIPANTES', 'Setor Participante']
+        return pd.DataFrame(columns=colunas)
+
+    # Forçamos o padrão dia/mês/ano para ele não quebrar com datas BR
+    df['DATA'] = pd.to_datetime(df['DATA'], dayfirst=True, errors='coerce')
+    
+    # Garante a extração limpa do Ano e Mês
+    df['ANO'] = df['DATA'].dt.year.fillna(datetime.now().year).astype(int)
+    df['MES_NUM'] = df['DATA'].dt.month.fillna(datetime.now().month).astype(int)
+    
+    # Limpeza para evitar filtros duplicados
+    df['TIPO DO PARTICIPANTE'] = df['TIPO DO PARTICIPANTE'].astype(str).str.strip().str.title()
+    df['LOCAL'] = df['LOCAL'].astype(str).str.strip()
+    df['Setor Participante'] = df['Setor Participante'].astype(str).str.strip()
+    
+    # Cria as colunas para o filtro de mês em PT
+    df['MÊS_NOME'] = df['MES_NUM'].map(MESES_PT)
+    df['MES_ANO_FILTRO'] = df['MÊS_NOME'] + "." + df['ANO'].astype(str).str[-2:]
+    
+    df['Ordem_Tempo'] = df['ANO'].astype(str) + df['MES_NUM'].astype(str).str.zfill(2)
+    
+    return df
 
 def carregar_setores():
-    # Mantido estático conforme sua estrutura anterior para simplificar a transição
     return ["SALA DE CGRSS", "ALA A", "ALA B", "ALA C", "OUTROS"] 
 
 def salvar_registro(novo_registro):
-    # Nova lógica de salvamento: Sincroniza com o Google Sheets em vez do Excel
+    # 1. LIMPEZA DE MEMÓRIA: Garante que estamos pegando a base atual
+    st.cache_data.clear()
     df_atual = carregar_dados()
-    novo_id = 1 if df_atual.empty or 'ID' not in df_atual.columns else df_atual['ID'].max() + 1
+    
+    # 2. Descobre o novo ID continuando a sequência correta
+    novo_id = 1 if df_atual.empty or 'ID' not in df_atual.columns else int(df_atual['ID'].max()) + 1
     novo_registro['ID'] = novo_id
     
+    # 3. Adiciona a nova linha
     df_novo = pd.DataFrame([novo_registro])
     df_final = pd.concat([df_atual, df_novo], ignore_index=True)
     
     colunas_para_salvar = ['ID', 'ANO', 'DATA', 'NOME DO TREINAMENTO', 'LOCAL', 
                            'TIPO DO PARTICIPANTE', 'QTD PARTICIPANTES', 'Setor Participante']
     
-    conn.update(worksheet="Dados", data=df_final[colunas_para_salvar], spreadsheet=URL_PLANILHA)
+    df_salvar = df_final[colunas_para_salvar].copy()
+    
+    # 4. Transforma a data de volta no padrão brasileiro de texto para o Sheets
+    df_salvar['DATA'] = df_salvar['DATA'].dt.strftime('%d/%m/%Y')
+    
+    # 5. Sobrescreve com a base total atualizada
+    conn.update(worksheet="Dados", data=df_salvar, spreadsheet=URL_PLANILHA)
     st.cache_data.clear()
 
 def salvar_banco_completo(df_editado):
-    # Função auxiliar para salvar edições completas feitas na tela de Gestão
     conn.update(worksheet="Dados", data=df_editado, spreadsheet=URL_PLANILHA)
     st.cache_data.clear()
 
 # ==========================================
-# FUNÇÃO DE ESTILIZAÇÃO DOS GRÁFICOS (Tema ViaFluxo mantido)
+# FUNÇÃO DE ESTILIZAÇÃO DOS GRÁFICOS (Tema ViaFluxo)
 # ==========================================
 def aplicar_estilo_grafico(fig):
     fig.update_layout(
@@ -98,12 +108,11 @@ def aplicar_estilo_grafico(fig):
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2936/2936690.png", width=60)
     st.title("Navegação")
-    # Menu atualizado com a 3ª opção pedida no áudio
     menu = st.radio("", ["📊 Dashboard Analítico", "📝 Cadastro de Treinamento", "⚙️ Gestão de Dados"])
     st.markdown("---")
 
 # ==========================================
-# TELA 1: DASHBOARD (Mantido 100% como o seu original)
+# TELA 1: DASHBOARD
 # ==========================================
 if menu == "📊 Dashboard Analítico":
     st.title("📊 Dashboard de Treinamentos")
@@ -192,7 +201,7 @@ if menu == "📊 Dashboard Analítico":
             st.plotly_chart(aplicar_estilo_grafico(fig_media), use_container_width=True)
 
 # ==========================================
-# TELA 2: CADASTRO (Mantido 100% como o seu original)
+# TELA 2: CADASTRO
 # ==========================================
 elif menu == "📝 Cadastro de Treinamento":
     st.title("📝 Painel de Cadastro")
@@ -240,7 +249,7 @@ elif menu == "📝 Cadastro de Treinamento":
                     st.success(f"✅ Treinamento **{nome_treinamento}** cadastrado com sucesso na Nuvem!")
 
 # ==========================================
-# TELA 3: GESTÃO DE DADOS (Nova tela solicitada no áudio)
+# TELA 3: GESTÃO DE DADOS
 # ==========================================
 elif menu == "⚙️ Gestão de Dados":
     st.title("⚙️ Gestão de Dados")
@@ -251,15 +260,13 @@ elif menu == "⚙️ Gestão de Dados":
     if df_raw.empty:
         st.info("O banco de dados está vazio no momento.")
     else:
-        # Puxa as colunas base para exibir na tabela de edição
         colunas_base = ['ID', 'ANO', 'DATA', 'NOME DO TREINAMENTO', 'LOCAL', 'TIPO DO PARTICIPANTE', 'QTD PARTICIPANTES', 'Setor Participante']
         df_base = df_raw[colunas_base].copy()
         
-        # Editor interativo do Streamlit
         df_editado = st.data_editor(
             df_base,
             use_container_width=True,
-            num_rows="dynamic", # Permite adicionar e deletar linhas
+            num_rows="dynamic",
             hide_index=True,
             column_config={
                 "DATA": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
@@ -269,7 +276,6 @@ elif menu == "⚙️ Gestão de Dados":
         
         st.markdown("---")
         
-        # Botão para enviar as alterações (edições/exclusões) para o Google Sheets
         if st.button("💾 Salvar Alterações na Nuvem", type="primary"):
             with st.spinner("Sincronizando com o Google Sheets..."):
                 salvar_banco_completo(df_editado)
