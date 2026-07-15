@@ -16,7 +16,7 @@ MESES_PT = {1: 'Jan', 2: 'Fev', 3: 'Mar', 4: 'Abr', 5: 'Mai', 6: 'Jun',
 
 # Conexão com o Google Sheets (Substituiu os caminhos locais do OS)
 conn = st.connection("gsheets", type=GSheetsConnection)
-URL_PLANILHA = "COLE_AQUI_O_LINK_DA_SUA_PLANILHA_DO_GOOGLE_SHEETS"
+URL_PLANILHA = "[https://docs.google.com/spreadsheets/d/](https://docs.google.com/spreadsheets/d/)..."
 
 # ==========================================
 # FUNÇÕES DE CARREGAMENTO DE DADOS (NUVEM)
