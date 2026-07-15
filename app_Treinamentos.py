@@ -16,7 +16,7 @@ MESES_PT = {1: 'Jan', 2: 'Fev', 3: 'Mar', 4: 'Abr', 5: 'Mai', 6: 'Jun',
 
 # Conexão com o Google Sheets (Substituiu os caminhos locais do OS)
 conn = st.connection("gsheets", type=GSheetsConnection)
-URL_PLANILHA = "[https://docs.google.com/spreadsheets/d/](https://docs.google.com/spreadsheets/d/)..."
+URL_PLANILHA = "[https://docs.google.com/spreadsheets/d/12qx7Y7fM1rSq2Mtt79QwV5owtL8hj7A9CYMBaldhMzo/edit?gid=2052337637#gid=2052337637](https://docs.google.com/spreadsheets/d/12qx7Y7fM1rSq2Mtt79QwV5owtL8hj7A9CYMBaldhMzo/edit?gid=2052337637#gid=2052337637)"
 
 # ==========================================
 # FUNÇÕES DE CARREGAMENTO DE DADOS (NUVEM)
